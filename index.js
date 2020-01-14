@@ -7,18 +7,55 @@ const readLine = require('readline').createInterface({
 });
 
 readLine.prompt();
-readLine.on('line', line => {
+readLine.on('line', async line => {
     switch(line.trim()) {
         case 'log' : 
         {
+            const { data } = await axios.get(`http://localhost:3001/food`);
+            const it = data[Symbol.iterator]();
+            let actionIt;
+            const actionIterator = {
+                [Symbol.iterator]() {
+                    const positions = [...this.actions];
+                    return {
+                        [Symbol.iterator]() {
+                            return this;
+                        },
+                        next(...args) {
+                            if(positions.length > 0) {
+                                const position = positions.shift();
+                                const result = position(...args);
+                                return { value: result, done: false };
+                            } else {
+                                return { done: true };
+                            }
+                        }
+                    };
+                },
+                actions: [askForServingSize, displayCalories],
+            };
+
+            function askForServingSize(food){
+                readLine.question(`How many servings did you eat? `, servingSize => {
+                    actionIt.next(servingSize, food);
+                })    
+            };
+
+            function displayCalories(servingSize, food){
+                const calories = food.calories;
+                console.log(`${food.name} with serving size ${servingSize} has ${Number.parseFloat(calories * parseInt(servingSize, 10)).toFixed()} calories`);
+                actionIt.next();
+                readLine.prompt();
+            };
+
             readLine.question(`What would you like to log today? \n`, async item => {
-                const { data } = await axios.get(`http://localhost:3001/food`);
-                const it = data[Symbol.iterator]();
                 let position = it.next();
                 while(!position.done) {
                     const food = position.value.name;
                     if(food === item) {
                         console.log(`${item} has ${position.value.calories} calories`);
+                        actionIt = actionIterator[Symbol.iterator]();
+                        actionIt.next(position.value);
                     }
                     position = it.next();
                 }
